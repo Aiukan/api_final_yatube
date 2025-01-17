@@ -2,12 +2,20 @@
 
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import mixins
 from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.filters import SearchFilter
+from rest_framework.exceptions import ValidationError
+from django.contrib.auth import get_user_model
 
-from posts.models import Post, Group, Comment
-from .serializers import PostSerializer, GroupSerializer, CommentSerializer
-from .permissions import IsAuthor
+from posts.models import Post, Group, Comment, Follow
+from .serializers import (
+    PostSerializer, GroupSerializer, CommentSerializer, FollowSerializer
+)
+from .permissions import AuthorOrReadOnly
+
+
+User = get_user_model()
 
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -16,7 +24,7 @@ class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
     pagination_class = LimitOffsetPagination
-    permission_classes = [IsAuthenticated, IsAuthor]
+    permission_classes = (AuthorOrReadOnly,)
 
     def perform_create(self, serializer):
         """Переопределение метода perform_create для PostViewSet.
@@ -31,6 +39,7 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
 
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
+    permission_classes = tuple()
 
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -38,7 +47,7 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
-    permission_classes = [IsAuthenticated, IsAuthor]
+    permission_classes = (AuthorOrReadOnly,)
 
     def get_queryset(self):
         """Переопределение метода get_queryset для CommentViewSet.
@@ -59,3 +68,30 @@ class CommentViewSet(viewsets.ModelViewSet):
             author=self.request.user,
             post=post
         )
+
+
+class FollowViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet
+):
+    """Вьюсет для модели Follow."""
+
+    serializer_class = FollowSerializer
+    filter_backends = (SearchFilter,)
+    search_fields = ('following__username',)
+
+    def get_queryset(self):
+        """Фильтрация несвязанных объектов для GET запроса."""
+        user = self.request.user
+        return Follow.objects.filter(user=user)
+
+    def perform_create(self, serializer):
+        """Добавление в сериализатор информации о пользователе."""
+        if (serializer.validated_data['following'] == self.request.user):
+            raise ValidationError('Подписка на самого себя запрещена.')
+        if self.get_queryset().filter(
+            following=serializer.validated_data['following']
+        ).exists():
+            raise ValidationError('Подписка на пользователя уже выполнена.')
+        serializer.save(user=self.request.user)

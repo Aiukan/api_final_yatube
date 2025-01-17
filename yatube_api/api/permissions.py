@@ -3,11 +3,19 @@
 from rest_framework import permissions
 
 
-class IsAuthor(permissions.BasePermission):
+class AuthorOrReadOnly(permissions.BasePermission):
     """Класс разрешения доступа редактирования для автора."""
 
+    def has_permission(self, request, view):
+        """Проверка авторизации для запросов на изменение данных."""
+        return (
+            request.method in permissions.SAFE_METHODS
+            or request.user.is_authenticated
+        )
+
     def has_object_permission(self, request, view, obj):
-        """Функция проверки авторства для запросов на изменение и удаление."""
-        if request.method in ['PUT', 'PATCH', 'DELETE']:
-            return obj.author == request.user
-        return True
+        """Проверка авторства для запросов на изменение данных."""
+        return (
+            request.method in permissions.SAFE_METHODS
+            or obj.author == request.user
+        )
