@@ -1,28 +1,14 @@
 """Сериализаторы для API проекта."""
-import base64
 
 from rest_framework import serializers
-from django.core.files.base import ContentFile
+from rest_framework.validators import UniqueTogetherValidator
+from rest_framework.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 
 from posts.models import Post, Group, Comment, Follow
 
 
 User = get_user_model()
-
-
-class Base64ImageField(serializers.ImageField):
-    """Поле для сохранения изображений в формате base64."""
-
-    def to_internal_value(self, data):
-        """Восстановление изображения из формата base64."""
-        if isinstance(data, str) and data.startswith('data:image'):
-            format, imgstr = data.split(';base64,')
-            ext = format.split('/')[-1]
-
-            data = ContentFile(base64.b64decode(imgstr), name='temp.' + ext)
-
-        return super().to_internal_value(data)
 
 
 class PostSerializer(serializers.ModelSerializer):
@@ -32,7 +18,7 @@ class PostSerializer(serializers.ModelSerializer):
         read_only=True,
         slug_field='username'
     )
-    image = Base64ImageField(required=False, allow_null=True)
+    image = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         """Мета-информация сериализатора для класса Post."""
@@ -72,7 +58,8 @@ class FollowSerializer(serializers.ModelSerializer):
 
     user = serializers.SlugRelatedField(
         read_only=True,
-        slug_field='username'
+        slug_field='username',
+        default=serializers.CurrentUserDefault()
     )
     following = serializers.SlugRelatedField(
         queryset=User.objects.all(),
@@ -83,4 +70,17 @@ class FollowSerializer(serializers.ModelSerializer):
         """Meta-информация сериализатора для класса Follow."""
 
         model = Follow
-        fields = ('id', 'user', 'following')
+        fields = ('user', 'following')
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Follow.objects.all(),
+                fields=('user', 'following')
+            )
+        ]
+
+    def validate_following(self, value):
+        """Проверка невозможности подписки на самого себя."""
+        request = self.context.get('request')
+        if (value == request.user):
+            raise ValidationError('Подписка на самого себя запрещена.')
+        return value
