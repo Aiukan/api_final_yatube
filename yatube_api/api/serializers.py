@@ -18,7 +18,6 @@ class PostSerializer(serializers.ModelSerializer):
         read_only=True,
         slug_field='username'
     )
-    image = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         """Мета-информация сериализатора для класса Post."""
@@ -74,13 +73,14 @@ class FollowSerializer(serializers.ModelSerializer):
         validators = [
             UniqueTogetherValidator(
                 queryset=Follow.objects.all(),
-                fields=('user', 'following')
+                fields=('user', 'following'),
+                message='Подписка на данного пользователя уже осуществлена.'
             )
         ]
 
     def validate_following(self, value):
         """Проверка невозможности подписки на самого себя."""
         request = self.context.get('request')
-        if (value == request.user):
+        if value == request.user:
             raise ValidationError('Подписка на самого себя запрещена.')
         return value

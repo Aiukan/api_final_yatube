@@ -49,17 +49,17 @@ class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
     permission_classes = (IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly)
 
-    def getPost(self):
+    def get_post(self):
         """Возвращение поста по полученным аргументам."""
         return get_object_or_404(Post, pk=self.kwargs['post_id'])
 
     def get_queryset(self):
         """Возвращает связанные комментарии для найденного поста."""
-        return self.getPost().comments.all()
+        return self.get_post().comments.all()
 
     def perform_create(self, serializer):
         """Автоматическое добавление номера и автора поста к комментарию."""
-        post = self.getPost()
+        post = self.get_post()
         serializer.save(
             author=self.request.user,
             post=post
